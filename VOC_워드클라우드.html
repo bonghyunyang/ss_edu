@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>고객 VOC 워드클라우드</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#1e293b; --text:#e2e8f0; --muted:#94a3b8;
+    --line:#334155; --accent:#60a5fa; --hi:#fbbf24;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+    background:var(--bg);color:var(--text);padding:32px 20px;line-height:1.6}
+  .wrap{max-width:920px;margin:0 auto}
+  h1{font-size:24px;font-weight:800;letter-spacing:-.5px}
+  .sub{color:var(--muted);font-size:14px;margin:6px 0 22px}
+  .cloud{position:relative;background:var(--card);border:1px solid var(--line);
+    border-radius:16px;height:380px;overflow:hidden}
+  .word{position:absolute;cursor:pointer;font-weight:800;white-space:nowrap;
+    transform:translate(-50%,-50%);transition:color .15s,text-shadow .15s;
+    user-select:none}
+  .word:hover{text-shadow:0 0 18px currentColor}
+  .word.active{color:var(--hi)!important;text-shadow:0 0 20px var(--hi)}
+  .panel{margin-top:18px;background:var(--card);border:1px solid var(--line);
+    border-radius:14px;padding:20px;min-height:70px}
+  .panel h2{font-size:15px;font-weight:700;margin-bottom:12px}
+  .panel h2 b{color:var(--hi)}
+  .hint{color:var(--muted);font-size:14px}
+  .voc{padding:11px 14px;border-left:3px solid var(--accent);
+    background:#27344977;border-radius:8px;margin-bottom:10px;font-size:14.5px}
+  .voc .no{color:var(--muted);font-size:12px;margin-right:8px}
+  mark{background:var(--hi);color:#1f2937;padding:0 2px;border-radius:3px;font-weight:700}
+  footer{color:var(--muted);font-size:12px;margin-top:22px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>☁️ 고객 VOC 워드클라우드</h1>
+  <div class="sub">자주 나온 단어일수록 크게 표시됩니다 · 단어를 클릭하면 원문이 펼쳐집니다</div>
+
+  <div class="cloud" id="cloud"></div>
+
+  <div class="panel" id="panel">
+    <div class="hint">👆 위에서 단어를 클릭하면 해당 단어가 포함된 VOC 원문이 여기에 표시됩니다.</div>
+  </div>
+
+  <footer>출처: 고객VOC.csv · 외부 라이브러리 없이 자체 구현</footer>
+</div>
+
+<script>
+// ---- VOC 원문 데이터 (CSV의 접수내용) ----
+const VOC = [
+  {no:1, text:"분당점에서 산 세탁기 설치가 이틀째 지연. 언제 되는지 연락이 없음."},
+  {no:2, text:"비스포크 냉장고 색상을 변경하고 싶은데 매장에서 가능한가요?"},
+  {no:3, text:"강남점 직원이 친절했다는 칭찬. 직원 이름은 모름."},
+  {no:4, text:"모바일 보상판매 견적이 광고와 다르다며 항의."},
+  {no:5, text:"에어컨 구매 문의 — 평수별 추천 모델을 알고 싶음."},
+];
+
+// ---- 조사/어미 (긴 것부터 제거) ----
+const PARTICLES = ["에서는","에서도","으로는","이라는","에게서","께서는",
+  "에서","에게","으로","이라며","라며","다며","이라고","라고","처럼","보다",
+  "까지","부터","마다","조차","이나","나마","한테","께서","이며","으로는",
+  "은","는","이","가","을","를","의","에","와","과","로","도","만","랑","과는",
+  "께","요","님","들"];
+
+// ---- 불용어 ----
+const STOP = new Set(["산","된","및","수","것","좀","더","또","그","저","이런",
+  "저런","하는","했다","한다","합니다","입니다","있는","없는","언제","되는지",
+  "싶은데","싶음","알고","하고"]);
+
+function stripParticle(w){
+  for(const p of PARTICLES){
+    if(w.length > p.length && w.endsWith(p)) return w.slice(0, w.length-p.length);
+  }
+  return w;
+}
+
+// ---- 토크나이즈 & 카운트 ----
+const counts = {};      // stem -> count
+const inLines = {};     // stem -> Set(voc index)
+VOC.forEach((v,idx)=>{
+  // 한글/영문/숫자 덩어리 추출
+  const tokens = v.text.match(/[가-힣]+|[A-Za-z]+/g) || [];
+  tokens.forEach(tok=>{
+    let w = /[가-힣]/.test(tok) ? stripParticle(tok) : tok;
+    if(w.length < 2) return;
+    if(STOP.has(w)) return;
+    counts[w] = (counts[w]||0)+1;
+    (inLines[w] = inLines[w] || new Set()).add(idx);
+  });
+});
+
+// 빈도 동률이 많으므로, 등장 문서수도 가중치로 반영
+const words = Object.keys(counts).map(w=>({
+  word:w, count:counts[w], docs:inLines[w].size
+})).sort((a,b)=> (b.count-a.count) || (b.docs-a.docs) || (b.word.length-a.word.length));
+
+// ---- 크기 매핑 ----
+const maxC = Math.max(...words.map(w=>w.count));
+const minC = Math.min(...words.map(w=>w.count));
+const SIZE_MIN=15, SIZE_MAX=46;
+const sizeOf = c => maxC===minC ? 26 : SIZE_MIN + (c-minC)/(maxC-minC)*(SIZE_MAX-SIZE_MIN);
+const PALETTE=["#60a5fa","#34d399","#f472b6","#fbbf24","#a78bfa","#38bdf8","#fb923c","#4ade80"];
+
+// ---- 충돌 회피 나선형 배치 ----
+const cloud = document.getElementById("cloud");
+function layout(){
+  cloud.querySelectorAll(".word").forEach(e=>e.remove());
+  const W = cloud.clientWidth, H = cloud.clientHeight;
+  const cx = W/2, cy = H/2;
+  const placed = []; // {x,y,w,h}
+  const overlap=(a,b)=> !(a.x+a.w/2 < b.x-b.w/2 || a.x-a.w/2 > b.x+b.w/2 ||
+                          a.y+a.h/2 < b.y-b.h/2 || a.y-a.h/2 > b.y+b.h/2);
+
+  words.forEach((item,i)=>{
+    const el = document.createElement("div");
+    el.className="word";
+    el.textContent=item.word;
+    el.style.fontSize=sizeOf(item.count)+"px";
+    el.style.color=PALETTE[i%PALETTE.length];
+    el.title=`${item.word} · ${item.count}회`;
+    cloud.appendChild(el);
+    const bw = el.offsetWidth+10, bh = el.offsetHeight+6;
+
+    // 아르키메데스 나선
+    let placedOK=false;
+    for(let t=0; t<2200; t+=1){
+      const ang=0.32*t, rad=4*t*0.55;
+      const x=cx+rad*Math.cos(ang), y=cy+rad*Math.sin(ang)*0.62;
+      if(x-bw/2<2||x+bw/2>W-2||y-bh/2<2||y+bh/2>H-2) continue;
+      const box={x,y,w:bw,h:bh};
+      if(placed.some(p=>overlap(box,p))) continue;
+      el.style.left=x+"px"; el.style.top=y+"px";
+      placed.push(box); placedOK=true; break;
+    }
+    if(!placedOK){ el.style.left=cx+"px"; el.style.top=cy+"px"; }
+
+    el.addEventListener("click",()=>show(item.word, el));
+  });
+}
+
+// ---- 클릭 → 원문 펼침 ----
+const panel=document.getElementById("panel");
+function escapeHtml(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+function show(word, el){
+  document.querySelectorAll(".word.active").forEach(e=>e.classList.remove("active"));
+  el.classList.add("active");
+  const idxs=[...(inLines[word]||[])].sort((a,b)=>a-b);
+  const re=new RegExp("("+word.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"[가-힣]*)","g");
+  const items=idxs.map(i=>{
+    const v=VOC[i];
+    const html=escapeHtml(v.text).replace(re,"<mark>$1</mark>");
+    return `<div class="voc"><span class="no">#${v.no}</span>${html}</div>`;
+  }).join("");
+  panel.innerHTML=`<h2>“<b>${escapeHtml(word)}</b>” 포함 VOC · ${idxs.length}건 (${counts[word]}회 등장)</h2>${items}`;
+}
+
+layout();
+window.addEventListener("resize",()=>{ layout(); });
+</script>
+</body>
+</html>
