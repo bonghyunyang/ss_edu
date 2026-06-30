@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VOC 분석 대시보드</title>
+<style>
+/* ============================================================
+   디자인 토큰 (Notion + Apple + Linear 미니멀 스타일)
+   라이트/다크는 [data-theme] 속성으로 전환
+   ============================================================ */
+:root{
+  --radius:14px; --radius-sm:10px;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 8px 24px rgba(0,0,0,.06);
+  --shadow-lg:0 12px 40px rgba(0,0,0,.18);
+  --ease:cubic-bezier(.22,.61,.36,1);
+  --font:"Apple SD Gothic Neo","Pretendard","Malgun Gothic",-apple-system,system-ui,sans-serif;
+  /* 워드클라우드 팔레트 (빈도 tier별) */
+  --p-blue:#2563eb; --p-purple:#7c3aed; --p-orange:#ea580c; --p-green:#0d9488; --p-pink:#db2777;
+}
+[data-theme="light"]{
+  --bg:#f7f8fa; --bg2:#eef0f4; --surface:#ffffff; --surface-2:#f4f5f8;
+  --text:#1a1d24; --text-2:#5b6472; --text-3:#8a93a3; --line:#e6e8ee;
+  --accent:#2563eb; --accent-soft:#e8efff; --glow:rgba(37,99,235,.35);
+  --mark:#fff1a8; --mark-text:#5b4b00;
+}
+[data-theme="dark"]{
+  --bg:#0c0f16; --bg2:#11151e; --surface:#161b26; --surface-2:#1c2230;
+  --text:#e8ecf3; --text-2:#9aa4b5; --text-3:#6b7384; --line:#232a38;
+  --accent:#60a5fa; --accent-soft:#1b2740; --glow:rgba(96,165,250,.45);
+  --mark:#fde047; --mark-text:#1a1d24;
+  --p-blue:#60a5fa; --p-purple:#a78bfa; --p-orange:#fb923c; --p-green:#2dd4bf; --p-pink:#f472b6;
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 8px 28px rgba(0,0,0,.45);
+  --shadow-lg:0 16px 50px rgba(0,0,0,.6);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--font); background:var(--bg); color:var(--text);
+  font-size:14px; line-height:1.55; -webkit-font-smoothing:antialiased;
+  transition:background .4s var(--ease),color .4s var(--ease);
+}
+.app{max-width:1340px;margin:0 auto;padding:22px 22px 60px}
+
+/* ---------- 상단 헤더 ---------- */
+.topbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.brand{display:flex;align-items:center;gap:11px;margin-right:auto}
+.brand .logo{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;
+  background:linear-gradient(135deg,var(--p-blue),var(--p-purple));color:#fff;font-size:18px;
+  box-shadow:0 4px 14px var(--glow)}
+.brand h1{font-size:18px;font-weight:800;letter-spacing:-.4px}
+.brand .tag{font-size:12px;color:var(--text-3)}
+
+/* 검색 */
+.search-wrap{position:relative;min-width:230px;flex:1;max-width:340px}
+.search-wrap input{width:100%;padding:9px 14px 9px 36px;border-radius:11px;border:1px solid var(--line);
+  background:var(--surface);color:var(--text);font-size:13.5px;font-family:inherit;
+  transition:border-color .2s,box-shadow .2s,background .4s}
+.search-wrap input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.search-wrap .ico{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-3);font-size:14px}
+.autocomplete{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--surface);
+  border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow-lg);overflow:hidden;
+  z-index:40;opacity:0;transform:translateY(-6px);pointer-events:none;transition:.18s var(--ease)}
+.autocomplete.show{opacity:1;transform:none;pointer-events:auto}
+.autocomplete .ac-item{display:flex;justify-content:space-between;padding:9px 14px;cursor:pointer;font-size:13px}
+.autocomplete .ac-item:hover,.autocomplete .ac-item.sel{background:var(--surface-2)}
+.autocomplete .ac-item b{color:var(--accent)}
+.autocomplete .ac-item .cnt{color:var(--text-3);font-size:12px}
+
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 13px;border-radius:11px;
+  border:1px solid var(--line);background:var(--surface);color:var(--text);font-size:13px;
+  font-family:inherit;cursor:pointer;font-weight:600;transition:.18s var(--ease)}
+.btn:hover{background:var(--surface-2);transform:translateY(-1px);box-shadow:var(--shadow)}
+.btn:active{transform:translateY(0)}
+.btn .ico{font-size:14px}
+
+/* ---------- KPI 카드 ---------- */
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:13px;margin-bottom:18px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:16px 17px;box-shadow:var(--shadow);position:relative;overflow:hidden;
+  opacity:0;transform:translateY(14px);animation:rise .6s var(--ease) forwards}
+.kpi:nth-child(1){animation-delay:.04s}.kpi:nth-child(2){animation-delay:.10s}
+.kpi:nth-child(3){animation-delay:.16s}.kpi:nth-child(4){animation-delay:.22s}
+.kpi:nth-child(5){animation-delay:.28s}
+.kpi .k-label{font-size:12px;color:var(--text-2);font-weight:600}
+.kpi .k-val{font-size:26px;font-weight:800;letter-spacing:-.5px;margin-top:7px;
+  font-variant-numeric:tabular-nums}
+.kpi .k-sub{font-size:11.5px;color:var(--text-3);margin-top:3px}
+.kpi .k-accent{position:absolute;right:-18px;top:-18px;width:64px;height:64px;border-radius:50%;
+  opacity:.10;background:var(--accent)}
+@keyframes rise{to{opacity:1;transform:none}}
+
+/* ---------- 메인 그리드 ---------- */
+.main{display:grid;grid-template-columns:1.55fr 1fr;gap:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);opacity:0;transform:translateY(16px);animation:rise .6s var(--ease) .3s forwards}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:15px 18px 12px}
+.panel-head h2{font-size:14px;font-weight:700;letter-spacing:-.2px}
+.panel-head .hint{font-size:11.5px;color:var(--text-3)}
+
+/* 빈도 슬라이더 */
+.controls{display:flex;align-items:center;gap:12px;padding:0 18px 12px;flex-wrap:wrap}
+.slider-box{display:flex;align-items:center;gap:10px;flex:1;min-width:200px}
+.slider-box label{font-size:12px;color:var(--text-2);font-weight:600;white-space:nowrap}
+input[type=range]{-webkit-appearance:none;appearance:none;height:5px;border-radius:5px;flex:1;
+  background:var(--bg2);outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:17px;height:17px;border-radius:50%;
+  background:var(--accent);border:3px solid var(--surface);box-shadow:0 1px 5px rgba(0,0,0,.25);transition:transform .15s}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.18)}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);border:3px solid var(--surface)}
+.slider-val{font-size:12px;font-weight:700;color:var(--accent);min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+
+/* 워드클라우드 캔버스 */
+.cloud-stage{position:relative;height:420px;margin:0 6px 6px;border-radius:var(--radius-sm);
+  background:radial-gradient(circle at 50% 40%,var(--surface-2),var(--surface));
+  overflow:hidden;cursor:grab}
+.cloud-stage.dragging{cursor:grabbing}
+.cloud-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.cloud-hud{position:absolute;left:12px;bottom:10px;display:flex;gap:6px;z-index:5}
+.cloud-hud .chip{font-size:11px;color:var(--text-3);background:var(--surface);border:1px solid var(--line);
+  padding:4px 9px;border-radius:20px;box-shadow:var(--shadow)}
+.cloud-zoom{position:absolute;right:12px;bottom:10px;display:flex;flex-direction:column;gap:6px;z-index:5}
+.cloud-zoom button{width:30px;height:30px;border-radius:9px;border:1px solid var(--line);background:var(--surface);
+  color:var(--text);font-size:16px;cursor:pointer;box-shadow:var(--shadow);transition:.15s var(--ease)}
+.cloud-zoom button:hover{background:var(--surface-2);transform:translateY(-1px)}
+
+/* 캔버스 툴팁 */
+.tooltip{position:fixed;z-index:80;pointer-events:none;background:var(--surface);border:1px solid var(--line);
+  border-radius:11px;box-shadow:var(--shadow-lg);padding:10px 13px;max-width:260px;opacity:0;
+  transform:translateY(6px) scale(.96);transition:.16s var(--ease)}
+.tooltip.show{opacity:1;transform:none}
+.tooltip .t-word{font-weight:800;font-size:14px;margin-bottom:3px}
+.tooltip .t-row{font-size:12px;color:var(--text-2)}
+.tooltip .t-ex{font-size:11.5px;color:var(--text-3);margin-top:6px;border-top:1px dashed var(--line);
+  padding-top:6px;line-height:1.45}
+
+/* Top20 막대 차트 */
+.chart-wrap{padding:4px 14px 16px}
+.chart-wrap canvas{width:100%;display:block}
+
+/* ---------- 우측 상세 패널 ---------- */
+.detail{min-height:200px}
+.detail-empty{padding:48px 24px;text-align:center;color:var(--text-3)}
+.detail-empty .big{font-size:40px;margin-bottom:10px;opacity:.5}
+.detail-body{padding:4px 18px 18px;opacity:0;animation:fade .4s var(--ease) forwards}
+@keyframes fade{to{opacity:1}}
+.detail-title{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.detail-title .dot{width:12px;height:12px;border-radius:4px}
+.detail-title .w{font-size:22px;font-weight:800;letter-spacing:-.4px}
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
+.stat{background:var(--surface-2);border-radius:var(--radius-sm);padding:11px 13px}
+.stat .s-l{font-size:11px;color:var(--text-2);font-weight:600}
+.stat .s-v{font-size:19px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums}
+.detail-sub{font-size:12px;color:var(--text-2);font-weight:700;margin:6px 0 10px;
+  display:flex;align-items:center;gap:7px}
+.detail-sub .badge{background:var(--accent-soft);color:var(--accent);border-radius:20px;
+  padding:1px 9px;font-size:11px}
+
+/* VOC 카드 (상세 패널 + 하단 공용) */
+.voc-card{border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface);
+  margin-bottom:9px;overflow:hidden;transition:border-color .2s,box-shadow .2s;
+  animation:slideIn .4s var(--ease) backwards}
+.voc-card:hover{border-color:var(--accent);box-shadow:var(--shadow)}
+@keyframes slideIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+.voc-card .vc-head{display:flex;align-items:center;gap:10px;padding:11px 13px;cursor:pointer;user-select:none}
+.voc-card .vc-no{font-size:11px;font-weight:800;color:#fff;background:var(--accent);border-radius:7px;
+  padding:2px 8px;min-width:34px;text-align:center;flex-shrink:0}
+.voc-card .vc-text{flex:1;font-size:13px;line-height:1.5;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;transition:.25s}
+.voc-card.open .vc-text{-webkit-line-clamp:unset;overflow:visible}
+.voc-card .vc-meta{font-size:11px;color:var(--text-3);flex-shrink:0;white-space:nowrap}
+.voc-card .vc-arrow{transition:transform .25s var(--ease);color:var(--text-3);flex-shrink:0}
+.voc-card.open .vc-arrow{transform:rotate(90deg)}
+mark{background:var(--mark);color:var(--mark-text);border-radius:3px;padding:0 2px;font-weight:700}
+
+/* ---------- 하단 VOC 리스트 ---------- */
+.bottom{margin-top:16px}
+.list-toolbar{display:flex;align-items:center;gap:10px;padding:0 18px 10px;flex-wrap:wrap}
+.list-toolbar .count{font-size:12px;color:var(--text-2)}
+.list-toolbar .count b{color:var(--accent)}
+.voc-list{padding:2px 18px 18px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.load-more{margin:4px auto 18px;display:block}
+.empty-row{grid-column:1/-1;text-align:center;color:var(--text-3);padding:30px}
+
+footer{text-align:center;color:var(--text-3);font-size:12px;margin-top:30px}
+
+/* ---------- 반응형 ---------- */
+@media(max-width:1080px){
+  .kpis{grid-template-columns:repeat(3,1fr)}
+  .main{grid-template-columns:1fr}
+  .voc-list{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  .app{padding:16px 13px 50px}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .brand .tag{display:none}
+  .search-wrap{max-width:none;order:5;flex-basis:100%}
+  .cloud-stage{height:340px}
+}
+/* 모션 최소화 선호 사용자 */
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body data-theme="light">
+<div class="app">
+
+  <!-- ===================== 상단 바 ===================== -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">◎</div>
+      <div>
+        <h1>VOC 분석 대시보드</h1>
+        <div class="tag">고객VOC.csv · 접수내용 텍스트 분석</div>
+      </div>
+    </div>
+
+    <div class="search-wrap">
+      <span class="ico">⌕</span>
+      <input id="search" type="text" placeholder="단어 검색…  (예: 설치, 직원)" autocomplete="off">
+      <div class="autocomplete" id="autocomplete"></div>
+    </div>
+
+    <button class="btn" id="btnPng"><span class="ico">⤓</span>PNG</button>
+    <button class="btn" id="btnJson"><span class="ico">{}</span>JSON</button>
+    <button class="btn" id="btnTheme"><span class="ico" id="themeIco">☾</span><span id="themeTxt">다크</span></button>
+  </div>
+
+  <!-- ===================== KPI ===================== -->
+  <div class="kpis" id="kpis"></div>
+
+  <!-- ===================== 메인 ===================== -->
+  <div class="main">
+    <!-- 좌측: 워드클라우드 + Top20 -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>인터랙티브 워드클라우드</h2>
+        <span class="hint">드래그 이동 · 휠 확대/축소 · 더블클릭 초기화</span>
+      </div>
+      <div class="controls">
+        <div class="slider-box">
+          <label>최소 빈도</label>
+          <input type="range" id="freqSlider" min="1" max="1" value="1" step="1">
+          <span class="slider-val" id="freqVal">1회 이상</span>
+        </div>
+      </div>
+      <div class="cloud-stage" id="stage">
+        <canvas id="cloud"></canvas>
+        <div class="cloud-hud">
+          <span class="chip" id="cloudCount">0 단어</span>
+          <span class="chip" id="zoomChip">100%</span>
+        </div>
+        <div class="cloud-zoom">
+          <button id="zoomIn" title="확대">+</button>
+          <button id="zoomOut" title="축소">−</button>
+          <button id="zoomReset" title="초기화">⟲</button>
+        </div>
+      </div>
+      <div class="panel-head" style="padding-top:14px">
+        <h2>Top 20 단어 빈도</h2>
+        <span class="hint">상위 20개</span>
+      </div>
+      <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+    </div>
+
+    <!-- 우측: 상세 -->
+    <div class="panel detail">
+      <div class="panel-head"><h2>단어 상세</h2><span class="hint" id="detailHint">단어를 클릭하세요</span></div>
+      <div id="detail">
+        <div class="detail-empty">
+          <div class="big">◌</div>
+          <div>워드클라우드 또는 막대그래프에서<br>단어를 선택하면 상세 정보가 표시됩니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== 하단 VOC 리스트 ===================== -->
+  <div class="panel bottom">
+    <div class="panel-head"><h2>VOC 원문</h2><span class="hint">카드를 클릭하면 펼침/접힘</span></div>
+    <div class="list-toolbar">
+      <span class="count" id="listCount"></span>
+    </div>
+    <div class="voc-list" id="vocList"></div>
+    <button class="btn load-more" id="loadMore" style="display:none">더 보기</button>
+  </div>
+
+  <footer>외부 라이브러리 없이 Vanilla JS + Canvas 로 구현 · 폐쇄망 단일 파일</footer>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+"use strict";
+/* ================================================================
+   0. 원본 VOC 데이터 (고객VOC.csv 의 접수내용)
+   - 폐쇄망/ file:// 더블클릭 실행을 위해 인라인 임베드
+   - CSV 를 교체할 경우 아래 배열만 갱신하면 전체가 재계산됨
+   ================================================================ */
+const RAW_VOC = [
+  "분당점에서 산 세탁기 설치가 이틀째 지연. 언제 되는지 연락이 없음.",
+  "비스포크 냉장고 색상을 변경하고 싶은데 매장에서 가능한가요?",
+  "강남점 직원이 친절했다는 칭찬. 직원 이름은 모름.",
+  "모바일 보상판매 견적이 광고와 다르다며 항의.",
+  "에어컨 구매 문의 — 평수별 추천 모델을 알고 싶음.",
+  "판교점에서 구매한 건조기 배송이 예정일보다 사흘 늦어지고 있음.",
+  "일산점 냉장고 설치 기사님이 약속 시간보다 두 시간 늦게 도착함.",
+  "수원점 직원이 제품 설명을 너무 빨리 해서 이해하기 어려웠음.",
+  "비스포크 정수기 필터 교체 주기가 궁금합니다.",
+  "강남점에서 산 TV 화면에 세로줄이 생겼는데 A/S 접수 방법을 알려주세요.",
+  "세탁기 배수 호스에서 물이 새서 바닥이 젖었음. 빠른 점검 요청.",
+  "모바일 신제품 사전예약 혜택이 매장마다 다른 이유가 궁금함.",
+  "분당점 주차가 너무 복잡해서 방문이 불편했음.",
+  "에어컨 설치 후 실외기 소음이 심해 잠을 못 잘 정도임.",
+  "비스포크 냉장고 제빙기에서 얼음이 안 나옵니다.",
+  "판교점 직원이 보상판매 진행을 매우 꼼꼼하게 도와줘서 만족.",
+  "건조기 필터 청소 방법을 설명서로는 모르겠어서 문의함.",
+  "수원점 체험존에서 본 청소기 흡입력이 좋아 바로 구매했음.",
+  "일산점 에어컨 설치 일정이 계속 미뤄져 클레임 제기.",
+  "멤버십 포인트가 결제할 때 적립되지 않았습니다.",
+  "강남점에서 구매한 스마트폰 액정 보호필름 부착 서비스가 미흡했음.",
+  "냉장고 도어 정렬이 맞지 않아 문이 잘 안 닫힘.",
+  "온라인 가격이 매장 가격보다 싸서 차액 보상이 되는지 문의.",
+  "분당점 직원 응대가 불친절했다는 불만 접수.",
+  "세탁기 통세척 코스 사용법을 알려주세요.",
+  "비스포크 인덕션 화구 하나가 작동하지 않습니다.",
+  "판교점에서 모바일 기기변경 후 데이터 이전이 안 됐다는 항의.",
+  "에어컨 청소 서비스 비용이 얼마인지 궁금합니다.",
+  "TV 리모컨이 처음부터 작동하지 않아 교환 요청.",
+  "수원점 매장이 깔끔하게 정리되어 있어 쇼핑이 편했음.",
+  "건조기에서 타는 냄새가 나서 사용을 중단했습니다.",
+  "보상판매로 반납한 기기 평가 금액이 너무 낮게 책정됨.",
+  "강남점 직원이 필요 없는 제품까지 권유해서 부담스러웠음.",
+  "냉장고 정전 후 작동이 멈췄는데 어떻게 해야 하나요?",
+  "일산점 배송 기사님이 친절하게 설치까지 도와주셔서 감사함.",
+  "모바일 요금제 안내가 가입할 때 들은 내용과 달라서 항의.",
+  "에어컨 필터 청소 후에도 냄새가 계속 납니다.",
+  "판교점 세탁기 전시 제품 할인 여부를 문의함.",
+  "비스포크 식기세척기 소음이 생각보다 커서 실망했음.",
+  "수원점에서 구매한 청소기 배터리가 금방 방전됨.",
+  "분당점 A/S 접수 후 일주일째 연락이 없어 답답함.",
+  "냉장고 내부 LED 조명이 깜빡거립니다.",
+  "강남점 프로모션 사은품을 받지 못했다는 문의.",
+  "TV 사운드바 연결이 안 되어 설정 도움을 요청함.",
+  "일산점 직원이 설치 일정을 친절하게 조율해 줘서 만족.",
+  "세탁기 구매 시 안내받은 무료 설치가 유료로 청구되었음.",
+  "모바일 보상판매 진행 절차가 너무 복잡하다는 불만.",
+  "판교점 에어컨 재고가 없어 한참 기다려야 한다고 안내받음.",
+  "비스포크 냉장고 정기 점검 서비스 신청 방법을 알고 싶음.",
+  "수원점 직원의 제품 비교 설명이 매우 도움이 되었음."
+];
+
+/* ================================================================
+   1. 텍스트 전처리 사전
+   ================================================================ */
+// 조사/어미 (긴 접미사부터 제거 — 1패스로 1개만 절단해 명사 파괴 최소화)
+const SUFFIXES = [
+  "되었습니다","드립니다","했습니다","됐습니다","같습니다","있습니다","없습니다",
+  "합니다","입니다","습니다","됩니다","에서는","에서도","으로는","이라는","에게서",
+  "께서는","하면서","면서","에서","에게","으로","이라며","라며","다며","이라고",
+  "라고","처럼","보다","까지","부터","마다","조차","이나","한테","께서","이며",
+  "은","는","이","가","을","를","의","에","와","과","로","도","만","랑","께","요","님","들"
+];
+// 불용어 (접속사 + 일반 동사/형용사 활용 + 부사 + 무의미어)
+const STOPWORDS = new Set([
+  // 접속사
+  "그리고","그러나","하지만","그런데","그래서","또한","또","및","즉","따라서","한편",
+  // 부사/지시어
+  "너무","매우","계속","바로","처음","한참","금방","아주","조금","많이","다시","서로",
+  "잘","못","안","좀","더","꽤","약간","거의","항상","이미","아직","역시","제일","가장",
+  // 대명사/형식명사
+  "그","저","것","수","때","등","듯","점","뭐","제","내","이런","저런","무슨","어떤","해당",
+  // 동사/형용사 활용 잔여
+  "있는","없는","하는","했다","한다","되는","된","되어","되지","하고","하기","해서","해도",
+  "싶음","싶은데","않아","않은","않게","납니다","나서","생겼","됐다","됐","했","함","음","임",
+  "있어","없어","좋아","커서","낮게","빨리","어려웠","모름","모르겠어","왔","주셔서","도와",
+  // 영문 불용어
+  "the","a","an","and","or","of","to","is","are","s"
+]);
+
+/* ================================================================
+   2. 토크나이저 — 접수내용 → 단어 빈도
+   처리: 숫자/특수문자 제거(정규식) → 조사·어미 절단 → 불용어/한글자 제거
+   ================================================================ */
+function stripSuffix(word){
+  for(const sfx of SUFFIXES){
+    if(word.length > sfx.length && word.endsWith(sfx)){
+      return word.slice(0, word.length - sfx.length);
+    }
+  }
+  return word;
+}
+function tokenize(text){
+  // 한글 음절 / 영문만 추출 → 숫자·특수문자·공백은 자연 제거
+  const rawTokens = text.match(/[가-힣]+|[A-Za-z]+/g) || [];
+  const out = [];
+  for(let tok of rawTokens){
+    const isKo = /[가-힣]/.test(tok);
+    let w = isKo ? stripSuffix(tok) : tok.toLowerCase();
+    if(w.length < 2) continue;            // 한 글자 단어 제거
+    if(STOPWORDS.has(w)) continue;        // 불용어 제거
+    out.push(w);
+  }
+  return out;
+}
+
+/**
+ * 전체 코퍼스 분석.
+ * @returns {{words:Array, total:number, byWord:Map, avgLen:number}}
+ */
+function analyze(corpus){
+  const freq = new Map();          // word -> count
+  const docIndex = new Map();      // word -> Set(voc index)
+  let totalTokens = 0, totalChars = 0;
+
+  corpus.forEach((text, idx) => {
+    totalChars += text.length;
+    const tokens = tokenize(text);
+    totalTokens += tokens.length;
+    const seen = new Set();
+    tokens.forEach(w => {
+      freq.set(w, (freq.get(w) || 0) + 1);
+      if(!seen.has(w)){
+        if(!docIndex.has(w)) docIndex.set(w, []);
+        docIndex.get(w).push(idx);
+        seen.add(w);
+      }
+    });
+  });
+
+  // 빈도 내림차순 정렬 + 순위 부여
+  const words = [...freq.entries()]
+    .map(([word, count]) => ({ word, count, docs: docIndex.get(word) }))
+    .sort((a,b) => b.count - a.count || b.docs.length - a.docs.length || a.word.localeCompare(b.word));
+  words.forEach((w,i) => { w.rank = i + 1; });
+
+  const byWord = new Map(words.map(w => [w.word, w]));
+  return {
+    words, byWord, totalTokens,
+    avgLen: corpus.length ? totalChars / corpus.length : 0
+  };
+}
+
+const ANALYSIS = analyze(RAW_VOC);
+const MAX_FREQ = ANALYSIS.words.length ? ANALYSIS.words[0].count : 1;
+
+/* ================================================================
+   3. 색상 팔레트 — 빈도 tier 에 따라 결정 (랜덤 금지)
+   ================================================================ */
+const PALETTE = [
+  getVar('--p-blue'), getVar('--p-purple'), getVar('--p-orange'),
+  getVar('--p-green'), getVar('--p-pink')
+];
+function getVar(name){ return getComputedStyle(document.body).getPropertyValue(name).trim(); }
+function refreshPalette(){
+  PALETTE[0]=getVar('--p-blue'); PALETTE[1]=getVar('--p-purple');
+  PALETTE[2]=getVar('--p-orange'); PALETTE[3]=getVar('--p-green'); PALETTE[4]=getVar('--p-pink');
+}
+// 빈도 → 팔레트 index (높은 빈도일수록 앞쪽 강조색)
+function colorFor(count){
+  const t = MAX_FREQ <= 1 ? 0 : (count - 1) / (MAX_FREQ - 1); // 0..1
+  const idx = Math.min(PALETTE.length - 1, Math.floor((1 - t) * PALETTE.length));
+  return PALETTE[idx];
+}
+
+/* ================================================================
+   4. 전역 상태
+   ================================================================ */
+const state = {
+  minFreq: 1,
+  search: "",
+  selected: null,      // 선택된 단어 string
+  theme: "light",
+  listLimit: 12        // 하단 리스트 점진 렌더 개수
+};
+
+// 현재 필터를 통과하는 단어 목록
+function visibleWords(){
+  const q = state.search.trim().toLowerCase();
+  return ANALYSIS.words.filter(w =>
+    w.count >= state.minFreq && (q === "" || w.word.toLowerCase().includes(q))
+  );
+}
+
+/* ================================================================
+   5. KPI 렌더
+   ================================================================ */
+function renderKPIs(){
+  const top = ANALYSIS.words[0] || { word:"-", count:0 };
+  const cards = [
+    { label:"총 VOC",       val: RAW_VOC.length.toLocaleString(),     sub:"접수 건수" },
+    { label:"추출 단어 수",  val: ANALYSIS.words.length.toLocaleString(), sub:"고유 키워드" },
+    { label:"평균 문장 길이", val: Math.round(ANALYSIS.avgLen) + "자",   sub:"접수내용 기준" },
+    { label:"최다 단어",     val: top.word,                            sub:"가장 빈번" },
+    { label:"최대 빈도",     val: top.count + "회",                     sub:"최다 단어 등장" }
+  ];
+  document.getElementById('kpis').innerHTML = cards.map(c => `
+    <div class="kpi">
+      <div class="k-accent"></div>
+      <div class="k-label">${c.label}</div>
+      <div class="k-val">${escapeHtml(c.val)}</div>
+      <div class="k-sub">${c.sub}</div>
+    </div>`).join('');
+}
+
+/* ================================================================
+   6. 워드클라우드 (Canvas + 카메라 + 애니메이션)
+   ================================================================ */
+const stage = document.getElementById('stage');
+const cloudCanvas = document.getElementById('cloud');
+const cctx = cloudCanvas.getContext('2d');
+const tooltip = document.getElementById('tooltip');
+
+let CW = 0, CH = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+let layoutWords = [];                 // 배치된 단어 객체 배열
+const camera = { x:0, y:0, scale:1, tx:0, ty:0, tScale:1 }; // t* = 목표값(애니메이션)
+let hoverWord = null, animating = false, introStart = 0;
+
+// 캔버스 픽셀 크기 동기화
+function resizeCloud(){
+  const r = stage.getBoundingClientRect();
+  CW = r.width; CH = r.height;
+  cloudCanvas.width = CW * DPR; cloudCanvas.height = CH * DPR;
+  buildLayout();
+  requestDraw();
+}
+
+/**
+ * 충돌 없는 배치 — 아르키메데스 나선 + 회전 사각형 AABB 충돌 검사.
+ * 단어별로 크기/색/회전/투명도/굵기를 모두 다르게 부여.
+ */
+function buildLayout(){
+  const words = visibleWords().slice(0, 140); // 성능: 상위 140개만 배치
+  const placed = [];
+  layoutWords = [];
+  if(!words.length){ document.getElementById('cloudCount').textContent = '0 단어'; return; }
+
+  const maxC = words[0].count, minC = words[words.length-1].count;
+  const SMIN = 14, SMAX = 52;
+  const sizeOf = c => maxC === minC ? 30 : SMIN + Math.pow((c-minC)/(maxC-minC), .85) * (SMAX-SMIN);
+
+  for(let i=0;i<words.length;i++){
+    const wd = words[i];
+    const fontSize = sizeOf(wd.count);
+    const weight = wd.count >= maxC*0.66 ? 800 : wd.count >= maxC*0.33 ? 700 : 600;
+    // 회전: 다수는 수평, 일부만 수직/기울임 (가독성 유지, 결정적 분배)
+    let angle = 0;
+    const m = i % 7;
+    if(m === 3) angle = -Math.PI/2;
+    else if(m === 5) angle = (i%2? 1:-1) * 0.18;
+    const baseAlpha = 0.55 + 0.45 * ((wd.count-minC)/Math.max(1,(maxC-minC)));
+
+    cctx.font = `${weight} ${fontSize}px ${cssFont()}`;
+    const metrics = cctx.measureText(wd.word);
+    const tw = metrics.width, th = fontSize; // 근사 높이
+    // 회전 반영한 AABB 절반 크기
+    const cos = Math.abs(Math.cos(angle)), sin = Math.abs(Math.sin(angle));
+    const halfW = (tw*cos + th*sin)/2 + 6;
+    const halfH = (tw*sin + th*cos)/2 + 5;
+
+    // 나선 탐색
+    let px=0, py=0, ok=false;
+    for(let t=0; t<2600; t++){
+      const a = 0.34*t, rad = 3.2*Math.sqrt(t)*4.0;
+      px = Math.cos(a)*rad; py = Math.sin(a)*rad*0.66;
+      const box = { x:px, y:py, hw:halfW, hh:halfH };
+      if(!placed.some(p => aabbHit(box,p))){ ok=true; break; }
+    }
+    placed.push({ x:px, y:py, hw:halfW, hh:halfH });
+    layoutWords.push({
+      ...wd, x:px, y:py, fontSize, weight, angle, color:colorFor(wd.count),
+      baseAlpha, tw, th, halfW, halfH,
+      // 애니메이션 상태값
+      alpha:0, dim:1, hover:0, delay:i*14,
+      dx:px, dy:py
+    });
+  }
+  document.getElementById('cloudCount').textContent = layoutWords.length + ' 단어';
+  introStart = 0; // draw 루프에서 첫 프레임 시각으로 초기화
+}
+function aabbHit(a,b){
+  return Math.abs(a.x-b.x) < (a.hw+b.hw) && Math.abs(a.y-b.y) < (a.hh+b.hh);
+}
+function cssFont(){ return '"Apple SD Gothic Neo","Pretendard","Malgun Gothic",sans-serif'; }
+function easeOut(t){ return 1 - Math.pow(1-t, 3); }
+
+// 렌더 요청 (중복 rAF 방지)
+let rafId = null;
+function requestDraw(){ if(rafId === null) rafId = requestAnimationFrame(draw); }
+
+function draw(ts){
+  rafId = null;
+  if(!introStart) introStart = ts || performance.now();
+  const now = ts || performance.now();
+  let active = false; // 이번 프레임 이후로도 애니메이션이 필요한가
+
+  // 카메라 부드러운 추적
+  camera.x += (camera.tx - camera.x) * 0.18;
+  camera.y += (camera.ty - camera.y) * 0.18;
+  camera.scale += (camera.tScale - camera.scale) * 0.18;
+  if(Math.abs(camera.tx-camera.x)>0.3 || Math.abs(camera.ty-camera.y)>0.3 ||
+     Math.abs(camera.tScale-camera.scale)>0.002) active = true;
+
+  cctx.setTransform(DPR,0,0,DPR,0,0);
+  cctx.clearRect(0,0,CW,CH);
+  cctx.save();
+  cctx.translate(CW/2 + camera.x, CH/2 + camera.y);
+  cctx.scale(camera.scale, camera.scale);
+
+  const q = state.search.trim().toLowerCase();
+  for(const w of layoutWords){
+    // intro: 시간차 fade-in + 중앙→목표 위치 이동
+    const p = clamp(((now - introStart) - w.delay) / 520, 0, 1);
+    const e = easeOut(p);
+    if(p < 1) active = true;
+    w.dx = w.x * e; w.dy = w.y * e;
+    const introScale = 0.55 + 0.45*e;
+
+    // 선택/검색에 따른 dim 목표
+    const isMatch = q === "" || w.word.toLowerCase().includes(q);
+    const isActive = (state.selected === null || state.selected === w.word) && isMatch;
+    const dimTarget = isActive ? 1 : 0.14;
+    w.dim += (dimTarget - w.dim) * 0.16;
+    if(Math.abs(dimTarget - w.dim) > 0.01) active = true;
+
+    // hover 확대 목표
+    const hoverTarget = (hoverWord === w) ? 1 : 0;
+    w.hover += (hoverTarget - w.hover) * 0.2;
+    if(Math.abs(hoverTarget - w.hover) > 0.01) active = true;
+
+    // alpha intro
+    w.alpha += (1 - w.alpha) * 0.2;
+
+    const selBoost = (state.selected === w.word) ? 1.12 : 1;
+    const scale = introScale * (1 + w.hover*0.16) * selBoost;
+    const alpha = w.baseAlpha * w.alpha * w.dim;
+
+    cctx.save();
+    cctx.translate(w.dx, w.dy);
+    cctx.rotate(w.angle);
+    cctx.scale(scale, scale);
+    cctx.globalAlpha = alpha;
+    cctx.font = `${w.weight} ${w.fontSize}px ${cssFont()}`;
+    cctx.textAlign = 'center'; cctx.textBaseline = 'middle';
+    // hover/선택 시 glow
+    if(w.hover > 0.02 || state.selected === w.word){
+      cctx.shadowColor = w.color;
+      cctx.shadowBlur = 18 * Math.max(w.hover, state.selected===w.word?0.7:0);
+    }
+    cctx.fillStyle = w.color;
+    cctx.fillText(w.word, 0, 0);
+    cctx.restore();
+  }
+  cctx.restore();
+
+  document.getElementById('zoomChip').textContent = Math.round(camera.scale*100) + '%';
+  animating = active;
+  if(active) requestDraw();
+}
+function clamp(v,a,b){ return v<a?a:v>b?b:v; }
+
+/* ---- 카메라 인터랙션 (드래그/휠/더블클릭) ---- */
+let dragging=false, dragStart=null, moved=0;
+stage.addEventListener('mousedown', e=>{
+  dragging=true; moved=0; dragStart={ x:e.clientX, y:e.clientY, cx:camera.tx, cy:camera.ty };
+  stage.classList.add('dragging');
+});
+window.addEventListener('mousemove', e=>{
+  if(dragging){
+    const dx=e.clientX-dragStart.x, dy=e.clientY-dragStart.y;
+    moved += Math.abs(dx)+Math.abs(dy);
+    camera.tx = dragStart.cx + dx; camera.ty = dragStart.cy + dy;
+    requestDraw();
+  }
+});
+window.addEventListener('mouseup', ()=>{ dragging=false; stage.classList.remove('dragging'); });
+
+// 휠 줌 (커서 기준)
+stage.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const r = stage.getBoundingClientRect();
+  const mx = e.clientX-r.left-CW/2, my = e.clientY-r.top-CH/2;
+  const factor = e.deltaY < 0 ? 1.12 : 1/1.12;
+  const ns = clamp(camera.tScale*factor, 0.4, 4);
+  // 커서 아래 지점이 고정되도록 보정
+  camera.tx = mx - (mx - camera.tx) * (ns/camera.tScale);
+  camera.ty = my - (my - camera.ty) * (ns/camera.tScale);
+  camera.tScale = ns;
+  requestDraw();
+}, { passive:false });
+
+stage.addEventListener('dblclick', resetCamera);
+function resetCamera(){ camera.tx=0; camera.ty=0; camera.tScale=1; requestDraw(); }
+document.getElementById('zoomIn').onclick  = ()=>{ camera.tScale=clamp(camera.tScale*1.2,0.4,4); requestDraw(); };
+document.getElementById('zoomOut').onclick = ()=>{ camera.tScale=clamp(camera.tScale/1.2,0.4,4); requestDraw(); };
+document.getElementById('zoomReset').onclick = resetCamera;
+
+/* ---- 마우스 → 월드 좌표 변환 후 단어 히트 테스트 ---- */
+function hitTest(clientX, clientY){
+  const r = stage.getBoundingClientRect();
+  const sx = clientX - r.left, sy = clientY - r.top;
+  const wx = (sx - CW/2 - camera.x)/camera.scale;
+  const wy = (sy - CH/2 - camera.y)/camera.scale;
+  // 위에서 그린 순서 역순으로 (큰 단어 우선)
+  for(let i=layoutWords.length-1;i>=0;i--){
+    const w = layoutWords[i];
+    if(w.dim < 0.3) continue; // 흐려진 단어는 무시
+    const ldx = wx - w.dx, ldy = wy - w.dy;
+    // 회전 역변환
+    const c=Math.cos(-w.angle), s=Math.sin(-w.angle);
+    const lx = ldx*c - ldy*s, ly = ldx*s + ldy*c;
+    if(Math.abs(lx) <= w.tw/2+4 && Math.abs(ly) <= w.th/2+3) return w;
+  }
+  return null;
+}
+
+stage.addEventListener('mousemove', e=>{
+  if(dragging) return;
+  const w = hitTest(e.clientX, e.clientY);
+  stage.style.cursor = w ? 'pointer' : 'grab';
+  if(w !== hoverWord){ hoverWord = w; requestDraw(); }
+  if(w) showTooltip(w, e.clientX, e.clientY); else hideTooltip();
+});
+stage.addEventListener('mouseleave', ()=>{ hoverWord=null; hideTooltip(); requestDraw(); });
+stage.addEventListener('click', e=>{
+  if(moved > 6) return;            // 드래그였다면 클릭 무시
+  const w = hitTest(e.clientX, e.clientY);
+  if(w) selectWord(w.word);
+});
+
+/* ---- 툴팁 ---- */
+function showTooltip(w, x, y){
+  const pct = (w.count / ANALYSIS.totalTokens * 100).toFixed(1);
+  const ex = RAW_VOC[w.docs[0]];
+  tooltip.innerHTML = `
+    <div class="t-word" style="color:${w.color}">${escapeHtml(w.word)}</div>
+    <div class="t-row">빈도 <b>${w.count}회</b> · 비율 <b>${pct}%</b> · ${w.rank}위</div>
+    <div class="t-ex">“${escapeHtml(ex)}”</div>`;
+  tooltip.classList.add('show');
+  const tw = tooltip.offsetWidth, th = tooltip.offsetHeight;
+  let px = x+14, py = y+14;
+  if(px+tw > innerWidth) px = x-tw-14;
+  if(py+th > innerHeight) py = y-th-14;
+  tooltip.style.left = px+'px'; tooltip.style.top = py+'px';
+}
+function hideTooltip(){ tooltip.classList.remove('show'); }
+
+/* ================================================================
+   7. Top20 막대 차트 (Canvas, 등장 애니메이션)
+   ================================================================ */
+const barCanvas = document.getElementById('barChart');
+const bctx = barCanvas.getContext('2d');
+let barAnim = { start:0, raf:null };
+
+function renderBarChart(){
+  const data = visibleWords().slice(0, 20);
+  const wrap = barCanvas.parentElement.getBoundingClientRect();
+  const w = wrap.width - 28;
+  const rowH = 22, gap = 6, h = data.length*(rowH+gap) + 8;
+  barCanvas.width = w*DPR; barCanvas.height = h*DPR;
+  barCanvas.style.height = h+'px';
+  barAnim.start = 0;
+  if(barAnim.raf) cancelAnimationFrame(barAnim.raf);
+  const max = data.length ? data[0].count : 1;
+
+  function frame(ts){
+    if(!barAnim.start) barAnim.start = ts;
+    const prog = clamp((ts - barAnim.start)/700, 0, 1);
+    const e = easeOut(prog);
+    bctx.setTransform(DPR,0,0,DPR,0,0);
+    bctx.clearRect(0,0,w,h);
+    const labelW = 76, valW = 34, barMax = w - labelW - valW;
+    bctx.font = '600 12px '+cssFont();
+    bctx.textBaseline='middle';
+    data.forEach((d,i)=>{
+      const y = i*(rowH+gap)+rowH/2+4;
+      // 라벨
+      bctx.fillStyle = getVar('--text-2');
+      bctx.textAlign='right';
+      bctx.fillText(truncate(d.word,6), labelW-8, y);
+      // 트랙
+      bctx.fillStyle = getVar('--bg2');
+      roundRect(bctx, labelW, y-rowH/2, barMax, rowH, 6); bctx.fill();
+      // 바
+      const bw = (d.count/max)*barMax*e;
+      bctx.fillStyle = colorFor(d.count);
+      roundRect(bctx, labelW, y-rowH/2, Math.max(bw,2), rowH, 6); bctx.fill();
+      // 값
+      bctx.fillStyle = getVar('--text');
+      bctx.textAlign='left';
+      bctx.fillText(Math.round(d.count*e)+'', labelW+barMax+8, y);
+    });
+    if(prog < 1) barAnim.raf = requestAnimationFrame(frame);
+  }
+  barAnim.raf = requestAnimationFrame(frame);
+}
+function roundRect(ctx,x,y,w,h,r){
+  r=Math.min(r,h/2,w/2); ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+function truncate(s,n){ return s.length>n ? s.slice(0,n-1)+'…' : s; }
+
+/* ================================================================
+   8. 우측 상세 패널
+   ================================================================ */
+function renderDetail(){
+  const el = document.getElementById('detail');
+  const hint = document.getElementById('detailHint');
+  if(!state.selected || !ANALYSIS.byWord.has(state.selected)){
+    hint.textContent = '단어를 클릭하세요';
+    el.innerHTML = `<div class="detail-empty"><div class="big">◌</div>
+      <div>워드클라우드 또는 막대그래프에서<br>단어를 선택하면 상세 정보가 표시됩니다.</div></div>`;
+    return;
+  }
+  const w = ANALYSIS.byWord.get(state.selected);
+  const pct = (w.count / ANALYSIS.totalTokens * 100).toFixed(2);
+  hint.textContent = w.docs.length + '건의 VOC';
+  const cards = w.docs.map(idx => vocCardHTML(idx, state.selected)).join('');
+  el.innerHTML = `
+    <div class="detail-body">
+      <div class="detail-title">
+        <span class="dot" style="background:${colorFor(w.count)}"></span>
+        <span class="w">${escapeHtml(w.word)}</span>
+      </div>
+      <div class="stat-grid">
+        <div class="stat"><div class="s-l">빈도</div><div class="s-v">${w.count}회</div></div>
+        <div class="stat"><div class="s-l">전체 대비</div><div class="s-v">${pct}%</div></div>
+        <div class="stat"><div class="s-l">등장 순위</div><div class="s-v">${w.rank}위</div></div>
+        <div class="stat"><div class="s-l">포함 VOC</div><div class="s-v">${w.docs.length}건</div></div>
+      </div>
+      <div class="detail-sub">포함된 VOC <span class="badge">${w.docs.length}</span></div>
+      <div data-voclist>${cards}</div>
+    </div>`;
+}
+
+/* ================================================================
+   9. VOC 카드 + 하단 리스트 (이벤트 위임 / 점진 렌더)
+   ================================================================ */
+function vocCardHTML(idx, highlightWord){
+  const text = RAW_VOC[idx];
+  const q = state.search.trim();
+  let html = escapeHtml(text);
+  // 검색어(노란 하이라이트) + 선택 단어 강조
+  const terms = [];
+  if(q) terms.push(q);
+  if(highlightWord) terms.push(highlightWord);
+  html = highlight(text, terms);
+  return `
+    <div class="voc-card" data-idx="${idx}">
+      <div class="vc-head">
+        <span class="vc-no">#${idx+1}</span>
+        <span class="vc-text">${html}</span>
+        <span class="vc-meta">${text.length}자</span>
+        <span class="vc-arrow">›</span>
+      </div>
+    </div>`;
+}
+// 여러 검색어를 안전하게 하이라이트
+function highlight(text, terms){
+  const safeTerms = terms.filter(Boolean).map(t => t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+  if(!safeTerms.length) return escapeHtml(text);
+  // 토큰 기준 분리 — escape 후 정규식 적용
+  const re = new RegExp('(' + safeTerms.join('|') + ')([가-힣]*)', 'gi');
+  let result = '', last = 0, m;
+  // escape 를 먼저 하면 인덱스가 어긋나므로 원문 매칭 후 조각별 escape
+  const plain = text;
+  while((m = re.exec(plain)) !== null){
+    result += escapeHtml(plain.slice(last, m.index));
+    result += '<mark>' + escapeHtml(m[0]) + '</mark>';
+    last = m.index + m[0].length;
+    if(m.index === re.lastIndex) re.lastIndex++;
+  }
+  result += escapeHtml(plain.slice(last));
+  return result;
+}
+
+function renderVocList(){
+  const listEl = document.getElementById('vocList');
+  const q = state.search.trim().toLowerCase();
+  // 필터: 검색어가 본문에 포함되거나, 선택 단어를 포함하는 VOC
+  let indices = RAW_VOC.map((_,i)=>i);
+  if(state.selected && ANALYSIS.byWord.has(state.selected)){
+    indices = ANALYSIS.byWord.get(state.selected).docs.slice();
+  } else if(q){
+    indices = indices.filter(i => RAW_VOC[i].toLowerCase().includes(q));
+  }
+  const total = indices.length;
+  const shown = indices.slice(0, state.listLimit);
+  document.getElementById('listCount').innerHTML =
+    `총 <b>${total}</b>건${ (state.selected||q) ? ' (필터 적용)' : '' } · ${shown.length}건 표시`;
+
+  listEl.innerHTML = shown.length
+    ? shown.map((idx,i)=> vocCardHTML(idx, state.selected)
+        .replace('class="voc-card"', `class="voc-card" style="animation-delay:${i*25}ms"`)).join('')
+    : `<div class="empty-row">조건에 맞는 VOC가 없습니다.</div>`;
+  document.getElementById('loadMore').style.display = total > shown.length ? 'block' : 'none';
+}
+
+// 이벤트 위임: 카드 접기/펼치기 (상세 패널 + 하단 공용)
+document.addEventListener('click', e=>{
+  const head = e.target.closest('.vc-head');
+  if(head){ head.parentElement.classList.toggle('open'); }
+});
+document.getElementById('loadMore').onclick = ()=>{ state.listLimit += 12; renderVocList(); };
+
+/* ================================================================
+   10. 단어 선택 / 전체 갱신
+   ================================================================ */
+function selectWord(word){
+  state.selected = (state.selected === word) ? null : word;
+  state.listLimit = 12;
+  renderDetail(); renderVocList(); requestDraw();
+}
+// 필터(슬라이더/검색) 변경 시 재배치 포함 갱신
+function refreshFilters(){
+  buildLayout(); renderBarChart(); renderVocList();
+  introStart = 0; requestDraw();
+}
+
+/* ================================================================
+   11. 검색 + 자동완성
+   ================================================================ */
+const searchInput = document.getElementById('search');
+const acBox = document.getElementById('autocomplete');
+let acIndex = -1;
+
+searchInput.addEventListener('input', ()=>{
+  state.search = searchInput.value;
+  state.selected = null;
+  state.listLimit = 12;
+  updateAutocomplete();
+  refreshFilters(); renderDetail();
+});
+searchInput.addEventListener('keydown', e=>{
+  const items = [...acBox.querySelectorAll('.ac-item')];
+  if(e.key === 'ArrowDown'){ acIndex = Math.min(acIndex+1, items.length-1); paintAc(items); e.preventDefault(); }
+  else if(e.key === 'ArrowUp'){ acIndex = Math.max(acIndex-1, 0); paintAc(items); e.preventDefault(); }
+  else if(e.key === 'Enter' && acIndex >= 0 && items[acIndex]){ items[acIndex].click(); }
+  else if(e.key === 'Escape'){ acBox.classList.remove('show'); }
+});
+searchInput.addEventListener('blur', ()=> setTimeout(()=>acBox.classList.remove('show'), 150));
+searchInput.addEventListener('focus', updateAutocomplete);
+
+function updateAutocomplete(){
+  const q = searchInput.value.trim().toLowerCase();
+  acIndex = -1;
+  if(!q){ acBox.classList.remove('show'); return; }
+  const matches = ANALYSIS.words.filter(w => w.word.toLowerCase().includes(q)).slice(0, 7);
+  if(!matches.length){ acBox.classList.remove('show'); return; }
+  acBox.innerHTML = matches.map(w => {
+    const i = w.word.toLowerCase().indexOf(q);
+    const hl = escapeHtml(w.word.slice(0,i)) + '<b>' + escapeHtml(w.word.slice(i,i+q.length)) + '</b>' + escapeHtml(w.word.slice(i+q.length));
+    return `<div class="ac-item" data-word="${escapeAttr(w.word)}"><span>${hl}</span><span class="cnt">${w.count}회</span></div>`;
+  }).join('');
+  acBox.classList.add('show');
+  acBox.querySelectorAll('.ac-item').forEach(it=>{
+    it.onclick = ()=>{
+      const word = it.getAttribute('data-word');
+      searchInput.value = word; state.search = word;
+      acBox.classList.remove('show');
+      refreshFilters(); selectWord(word);
+    };
+  });
+}
+function paintAc(items){ items.forEach((it,i)=> it.classList.toggle('sel', i===acIndex)); }
+
+/* ================================================================
+   12. 빈도 슬라이더
+   ================================================================ */
+const slider = document.getElementById('freqSlider');
+slider.max = MAX_FREQ;
+slider.addEventListener('input', ()=>{
+  state.minFreq = +slider.value;
+  document.getElementById('freqVal').textContent = state.minFreq + '회 이상';
+  refreshFilters();
+});
+
+/* ================================================================
+   13. 다크모드 토글
+   ================================================================ */
+document.getElementById('btnTheme').onclick = ()=>{
+  state.theme = state.theme === 'light' ? 'dark' : 'light';
+  document.body.setAttribute('data-theme', state.theme);
+  document.getElementById('themeIco').textContent = state.theme==='light' ? '☾' : '☀';
+  document.getElementById('themeTxt').textContent = state.theme==='light' ? '다크' : '라이트';
+  refreshPalette();
+  // 색상 캐시 갱신
+  layoutWords.forEach(w => w.color = colorFor(w.count));
+  renderBarChart(); requestDraw();
+};
+
+/* ================================================================
+   14. Export — PNG (워드클라우드) / JSON (필터 상태)
+   ================================================================ */
+document.getElementById('btnPng').onclick = ()=>{
+  // 배경을 채운 오프스크린에 현재 클라우드를 합성해 PNG 저장
+  const out = document.createElement('canvas');
+  out.width = cloudCanvas.width; out.height = cloudCanvas.height;
+  const octx = out.getContext('2d');
+  octx.fillStyle = getVar('--surface'); octx.fillRect(0,0,out.width,out.height);
+  octx.drawImage(cloudCanvas, 0, 0);
+  downloadURI(out.toDataURL('image/png'), 'voc_wordcloud.png');
+};
+document.getElementById('btnJson').onclick = ()=>{
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    filters: { minFreq: state.minFreq, search: state.search, selected: state.selected, theme: state.theme },
+    summary: { totalVOC: RAW_VOC.length, uniqueWords: ANALYSIS.words.length,
+               totalTokens: ANALYSIS.totalTokens, avgSentenceLength: +ANALYSIS.avgLen.toFixed(1) },
+    visibleWords: visibleWords().map(w => ({ word:w.word, count:w.count, rank:w.rank,
+               ratio:+(w.count/ANALYSIS.totalTokens*100).toFixed(2) }))
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+  downloadURI(URL.createObjectURL(blob), 'voc_filter_state.json');
+};
+function downloadURI(uri, name){
+  const a = document.createElement('a');
+  a.href = uri; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+}
+
+/* ================================================================
+   15. 유틸
+   ================================================================ */
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function escapeAttr(s){ return escapeHtml(s).replace(/'/g,'&#39;'); }
+
+/* ================================================================
+   16. 초기화
+   ================================================================ */
+function init(){
+  document.getElementById('freqVal').textContent = '1회 이상';
+  renderKPIs();
+  resizeCloud();          // buildLayout + draw 포함
+  renderBarChart();
+  renderDetail();
+  renderVocList();
+}
+let resizeTimer = null;
+window.addEventListener('resize', ()=>{
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(()=>{ resizeCloud(); renderBarChart(); }, 120);
+});
+init();
+</script>
+</body>
+</html>
